@@ -51,6 +51,7 @@ contract DSCEngine is ReentrancyGuard {
 
     //Events
     event CollateralDeposited(address indexed user, address indexed token, uint256 indexed amount);
+    event CollateralRedeemed(address indexed user, address indexed token, uint256 indexed amount);
 
     // Modifiers
     modifier moreThanZero(uint256 amount) {
@@ -81,6 +82,20 @@ contract DSCEngine is ReentrancyGuard {
     }
 
     //External functions
+    /**
+     * @notice follow the Check Effect Interaction
+     * @param tokenCollateralAddress The address of the token to deposit as collateral
+     * @param amountDscToMint Amount of decentralized stablecoin to mint
+     * @param amountCollateral The amount of collateral to deposit
+     */
+    function depositCollateralAndMintDsc(
+        address tokenCollateralAddress,
+        uint256 amountCollateral,
+        uint256 amountDscToMint
+    ) external {
+        depositCollateral(tokenCollateralAddress, amountCollateral);
+        mintDsc(amountDscToMint);
+    }
 
     /**
      * @notice follow the Check Effect Interaction
@@ -88,7 +103,7 @@ contract DSCEngine is ReentrancyGuard {
      * @param amountCollateral The amount of collateral to deposit
      */
     function depositCollateral(address tokenCollateralAddress, uint256 amountCollateral)
-        external
+        public
         moreThanZero(amountCollateral)
         isAllowedToken(tokenCollateralAddress)
         nonReentrant
@@ -106,7 +121,7 @@ contract DSCEngine is ReentrancyGuard {
      * @notice They must have more collateral value than the minimun thresold
      */
 
-    function mintDsc(uint256 amountDscToMint) external moreThanZero(amountDscToMint) nonReentrant {
+    function mintDsc(uint256 amountDscToMint) public moreThanZero(amountDscToMint) nonReentrant {
         s_DscMinted[msg.sender] += amountDscToMint;
         // If they minted too much ($150 DSC, $100 ETH)
         revertIfHealthFactorIsBroken(msg.sender);
@@ -156,5 +171,19 @@ contract DSCEngine is ReentrancyGuard {
         AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeeds[token]);
         (, int256 price,,,) = priceFeed.latestRoundData();
         return ((uint256(price) * ADDITINAL_FEED_PRECISION) * amount) / PRECISION;
+    }
+
+    function redeemCollateral(address tokenCollateralAddress, uint256 amountCollateral)
+        external
+        moreThanZero(amountCollateral)
+        nonReentrant
+    {
+        s_collateralDeposited[msg.sender][tokenCollateralAddress] -= amountCollateral;
+        emit CollateralRedeemed(msg.sender, tokenCollateralAddress, amountCollateral);
+
+        bool success = IERC20(tokenCollateralAddress).transfer(msg.sender, amountCollateral);
+        if (!success) {
+            revert DSCEngine__TransferFailed();
+        }
     }
 }
