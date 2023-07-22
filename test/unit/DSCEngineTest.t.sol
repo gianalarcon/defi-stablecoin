@@ -21,6 +21,8 @@ contract DSCEngineTest is Test {
         (ethUsdPriceFeed,, weth,,) = config.activeNetworking();
     }
 
+    // Contructor Tests
+
     // Price Tests
     function testGetUsdValue() public {
         uint256 ethAmount = 15e18;
