@@ -7,8 +7,9 @@ import {DeployDSC} from "../../script/DeployDSC.s.sol";
 import {DSCEngine} from "../../src/DSCEngine.sol";
 import {DecentralizedStableCoin} from "../../src/DecentralizedStableCoin.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
-import {IERC20} from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {console} from "forge-std/console.sol";
+import {Handler} from "./Handler.t.sol";
 
 contract Invariants is Test {
     DeployDSC deployer;
@@ -17,11 +18,15 @@ contract Invariants is Test {
     HelperConfig config;
     address weth;
     address wbtc;
+    Handler handler;
 
     function setUp() public {
         deployer = new DeployDSC();
         (dsc, dsc_e, config) = deployer.run();
-        targetContract(address(dsc_e));
+        //targetContract(address(dsc_e));
+        handler = new Handler(dsc_e, dsc);
+        targetContract(address(handler));
+
         (,, weth, wbtc,) = config.activeNetworking();
     }
 

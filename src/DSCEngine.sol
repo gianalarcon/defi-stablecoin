@@ -6,7 +6,7 @@ import {DecentralizedStableCoin} from "./DecentralizedStableCoin.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
-
+import {OracleLib} from "./libraries/OracleLib.sol";
 /**
  * @title DSCEngine
  * @author GM
@@ -37,18 +37,24 @@ contract DSCEngine is ReentrancyGuard {
     error DSCEngine__HealthFactorOk();
     error DSCEngine__HealtlFactorNotImproved();
 
+    // Type
+    using OracleLib for AggregatorV3Interface;
+
     //State variables
+    DecentralizedStableCoin private immutable i_dsc;
 
     uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
-    uint256 private constant PRECISION = 1e18;
-    uint256 private constant LIQUIDATION_THRESHOLD = 50;
-    uint256 private constant LIQUIDATION_PRECISION = 100;
+    uint256 private constant FEED_PRECISION = 1e18;
+    uint256 private constant LIQUIDATION_THRESHOLD = 50; // This means you need to be 200% over-collateralized
+    uint256 private constant LIQUIDATION_PRECISION = 100; // This means you get assets at a 10% discount when liquidating
     uint256 private constant LIQUIDATION_BONUS = 10;
     uint256 private constant MIN_HEALTH_FACTOR = 1e18;
 
+    /// @dev Mapping of token address to price feed address
     mapping(address token => address priceFeed) private s_priceFeeds;
-    DecentralizedStableCoin private immutable i_dsc;
+    /// @dev Amount of collateral deposited by user
     mapping(address user => mapping(address token => uint256 amount)) private s_collateralDeposited;
+    /// @dev Amount of DSC minted by user
     mapping(address user => uint256 amountDSCMinted) private s_DscMinted;
     address[] private s_collateralTokens;
 
@@ -261,8 +267,8 @@ contract DSCEngine is ReentrancyGuard {
 
     function _getUsdValue(address token, uint256 amount) private view returns (uint256) {
         AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeeds[token]);
-        (, int256 price,,,) = priceFeed.latestRoundData();
-        return ((uint256(price) * ADDITIONAL_FEED_PRECISION) * amount) / PRECISION;
+        (, int256 price,,,) = priceFeed.staleCheckLastestRoundData();
+        return ((uint256(price) * ADDITIONAL_FEED_PRECISION) * amount) / FEED_PRECISION;
     }
 
     function _calculateHealthFactor(uint256 totalDscMinted, uint256 collateralValueInUsd)
@@ -272,7 +278,7 @@ contract DSCEngine is ReentrancyGuard {
     {
         if (totalDscMinted == 0) return type(uint256).max;
         uint256 collateralAdjustedForThreshold = (collateralValueInUsd * LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION;
-        return (collateralAdjustedForThreshold * PRECISION) / totalDscMinted;
+        return (collateralAdjustedForThreshold * FEED_PRECISION) / totalDscMinted;
     }
 
     function revertIfHealthFactorIsBroken(address user) internal view {
@@ -327,11 +333,11 @@ contract DSCEngine is ReentrancyGuard {
         // 1 ETH = 2000 USD
         // The returned value from Chainlink will be 2000 * 1e8
         // Most USD pairs have 8 decimals, so we will just pretend they all do
-        return ((usdAmountInWei * PRECISION) / (uint256(price) * ADDITIONAL_FEED_PRECISION));
+        return ((usdAmountInWei * FEED_PRECISION) / (uint256(price) * ADDITIONAL_FEED_PRECISION));
     }
 
     function getPrecision() external pure returns (uint256) {
-        return PRECISION;
+        return FEED_PRECISION;
     }
 
     function getAdditionalFeedPrecision() external pure returns (uint256) {
